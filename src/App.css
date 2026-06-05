@@ -1,0 +1,40 @@
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Manrope:wght@300;400;500;600;700&display=swap");
+
+.App {
+  min-height: 100vh;
+  font-family: "Manrope", sans-serif;
+  background-color: #f9f8f6;
+  color: #1c1917;
+}
+
+h1, h2, h3, h4, h5, .font-heading {
+  font-family: "Outfit", sans-serif;
+}
+
+.rdp {
+  --rdp-cell-size: 40px;
+  --rdp-accent-color: #4338ca;
+  --rdp-background-color: #eef2ff;
+  margin: 0;
+}
+
+.rdp-day_selected,
+.rdp-day_selected:focus-visible,
+.rdp-day_selected:hover {
+  background-color: #4338ca !important;
+  color: #ffffff !important;
+}
+
+.rdp-day_today:not(.rdp-day_selected) {
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+}
+
+/* Hide scrollbar styling on time slot grid */
+.slot-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.slot-scroll::-webkit-scrollbar-thumb {
+  background-color: #e7e5e4;
+  border-radius: 3px;
+}
