@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
-import { CalendarCheck, Loader2, Clock } from "lucide-react";
+import { CalendarCheck, Loader2, Clock, CheckCircle2 } from "lucide-react";
 import { api } from "@/lib/api";
 
 function fmtDateISO(d) {
@@ -30,24 +30,27 @@ function fmtFullDate(d) {
   });
 }
 
-const ALLOWED_DATES = [
-  "2026-06-10",
-  "2026-06-11",
-];
+// Hoist static data to module level (server-hoist-static-io)
+const ALLOWED_DATES = ["2026-06-10", "2026-06-11"];
+
+// Stable set for O(1) lookup (js-set-map-lookups)
+const ALLOWED_SET = new Set(ALLOWED_DATES);
+
+// Static JSX hoisted outside component (rendering-hoist-jsx)
+const EmptyDateState = (
+  <div className="h-64 flex flex-col items-center justify-center text-stone-400 text-sm gap-2">
+    <Clock className="w-8 h-8 opacity-30" />
+    <p>Pick a date to see time slots</p>
+  </div>
+);
 
 export default function DateTimePicker({ value, onChange }) {
-  const today = useMemo(() => {
-    const t = new Date();
-    t.setHours(0, 0, 0, 0);
-    return t;
-  }, []);
-
   const [date, setDate] = useState(value?.date ? new Date(value.date) : null);
   const [slot, setSlot] = useState(value?.slot || null);
   const [availability, setAvailability] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const dateISO = date ? fmtDateISO(date) : null;
+  const dateISO = useMemo(() => (date ? fmtDateISO(date) : null), [date]);
 
   useEffect(() => {
     if (!dateISO) {
@@ -58,41 +61,38 @@ export default function DateTimePicker({ value, onChange }) {
     setLoading(true);
     api
       .get("/availability", { params: { date: dateISO } })
-      .then(({ data }) => {
-        if (!cancelled) setAvailability(data);
-      })
-      .catch(() => {
-        if (!cancelled) setAvailability(null);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then(({ data }) => { if (!cancelled) setAvailability(data); })
+      .catch(() => { if (!cancelled) setAvailability(null); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [dateISO]);
 
+  // Use primitive dependency (rerender-dependencies)
   useEffect(() => {
     onChange?.({ date: dateISO, slot });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateISO, slot]);
 
-  const handleDateSelect = (d) => {
+  // Stable callback (rerender-functional-setstate)
+  const handleDateSelect = useCallback((d) => {
     setDate(d || null);
     setSlot(null);
-  };
+  }, []);
+
+  const handleSlotSelect = useCallback((s) => {
+    setSlot(s);
+  }, []);
+
+  const handleCancelSlot = useCallback(() => setSlot(null), []);
 
   return (
-    <div
-      className="bg-white border border-stone-200 rounded-2xl shadow-sm overflow-hidden"
-      data-testid="datetime-picker"
-    >
+    <div className="glass-picker" data-testid="datetime-picker">
       <div className="grid grid-cols-1 lg:grid-cols-2">
-        {/* Calendar Side */}
-        <div className="p-6 border-b lg:border-b-0 lg:border-r border-stone-200">
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarCheck className="w-4 h-4 text-indigo-700" />
-            <p className="text-xs tracking-[0.2em] uppercase font-semibold text-stone-500">
+        {/* ── Calendar Side ── */}
+        <div className="p-5 border-b lg:border-b-0 lg:border-r border-stone-200/70">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarCheck className="w-4 h-4" style={{ color: "#24B1B1" }} />
+            <p className="text-[11px] tracking-[0.18em] uppercase font-semibold text-stone-500">
               Select date
             </p>
           </div>
@@ -100,73 +100,73 @@ export default function DateTimePicker({ value, onChange }) {
             mode="single"
             selected={date}
             onSelect={handleDateSelect}
-            disabled={(d) => !ALLOWED_DATES.includes(fmtDateISO(d))}
+            disabled={(d) => !ALLOWED_SET.has(fmtDateISO(d))}
             initialFocus
             data-testid="calendar"
+            className="rounded-xl"
           />
-          <p className="text-xs text-stone-500 mt-3">Available: Jun 10 &amp; Jun 11, 2026 only</p>
+          <p className="text-[11px] text-stone-400 mt-3 flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#24B1B1" }} />
+            Available: Jun 10 &amp; Jun 11, 2026 only
+          </p>
         </div>
 
-        {/* Time Slots Side */}
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-4">
+        {/* ── Time Slots Side ── */}
+        <div className="p-5">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Clock className="w-4 h-4 text-indigo-700" />
-              <p className="text-xs tracking-[0.2em] uppercase font-semibold text-stone-500">
+              <Clock className="w-4 h-4" style={{ color: "#24B1B1" }} />
+              <p className="text-[11px] tracking-[0.18em] uppercase font-semibold text-stone-500">
                 Select time
               </p>
             </div>
             {date && (
-              <p className="text-sm text-stone-700 font-medium" data-testid="picker-date-label">
+              <p className="text-xs text-stone-600 font-medium bg-stone-100 px-2.5 py-1 rounded-full" data-testid="picker-date-label">
                 {date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}
               </p>
             )}
           </div>
 
-          {!date && (
-            <div className="h-72 flex items-center justify-center text-stone-400 text-sm">
-              Pick a date to see available time slots
-            </div>
-          )}
+          {!date && EmptyDateState}
 
           {date && loading && (
-            <div className="h-72 flex items-center justify-center text-stone-400 text-sm">
-              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Loading slots…
+            <div className="h-64 flex items-center justify-center text-stone-400 text-sm gap-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>Loading slots…</span>
             </div>
           )}
 
           {date && !loading && availability && availability.closed && (
-            <div className="h-72 flex items-center justify-center text-stone-500 text-sm">
+            <div className="h-64 flex items-center justify-center text-stone-500 text-sm">
               {availability.reason || "Closed"}
             </div>
           )}
 
           {date && !loading && availability && !availability.closed && (
-            <div className="slot-scroll grid grid-cols-2 gap-2 max-h-72 overflow-y-auto pr-1">
+            <div className="slot-scroll grid grid-cols-3 gap-1.5 max-h-64 overflow-y-auto pr-1">
               {availability.slots.map((s) => {
-                const disabled = !s.available;
+                const isDisabled = !s.available;
                 const isSelected = slot === s.slot;
                 return (
                   <button
                     type="button"
                     key={s.slot}
-                    disabled={disabled}
-                    onClick={() => setSlot(s.slot)}
+                    disabled={isDisabled}
+                    onClick={() => handleSlotSelect(s.slot)}
                     data-testid={`time-slot-${s.slot}`}
                     className={[
-                      "h-11 rounded-full border text-sm font-medium transition-all duration-200",
-                      disabled
-                        ? "border-stone-100 text-stone-300 bg-stone-50 cursor-not-allowed"
-                        : isSelected
-                        ? "bg-indigo-700 text-white border-indigo-700 shadow-sm hover:-translate-y-[1px]"
-                        : "border-stone-200 text-stone-700 hover:border-indigo-600 hover:text-indigo-700 hover:-translate-y-[1px]",
+                      "glass-slot-btn h-10 flex flex-col items-center justify-center",
+                      isSelected ? "selected" : "",
                     ].join(" ")}
                   >
-                    {fmtTime12(s.slot)}
-                    {!disabled && s.booked > 0 && (
-                      <span className={"ml-1 text-[10px] " + (isSelected ? "text-indigo-100" : "text-stone-400")}>
-                        ({s.capacity - s.booked} left)
+                    <span className="text-[12px] font-semibold leading-none">{fmtTime12(s.slot)}</span>
+                    {!isDisabled && s.booked > 0 && (
+                      <span className={`text-[9px] mt-0.5 leading-none ${isSelected ? "text-teal-100" : "text-stone-400"}`}>
+                        {s.capacity - s.booked} left
                       </span>
+                    )}
+                    {isDisabled && (
+                      <span className="text-[9px] mt-0.5 leading-none text-stone-300">Full</span>
                     )}
                   </button>
                 );
@@ -176,17 +176,22 @@ export default function DateTimePicker({ value, onChange }) {
         </div>
       </div>
 
-      {/* Confirmation Bar */}
+      {/* ── Confirmation Bar ── */}
       {date && slot && (
         <div
-          className="bg-indigo-700 text-white px-6 py-4 flex items-center justify-between"
+          className="px-6 py-4 flex items-center justify-between"
+          style={{
+            background: "linear-gradient(135deg, #007979 0%, #24B1B1 100%)",
+          }}
           data-testid="selected-time-bar"
         >
           <div className="flex items-center gap-3">
-            <CalendarCheck className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 text-white" />
+            </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-indigo-200">Selected time</p>
-              <p className="text-base font-medium">
+              <p className="text-[10px] uppercase tracking-[0.18em] font-semibold" style={{ color: "rgba(36,177,177,0.7)" }}>Selected</p>
+              <p className="text-sm font-semibold text-white mt-0.5">
                 {fmtTime12(slot)} · {fmtFullDate(date)}
               </p>
             </div>
@@ -194,11 +199,12 @@ export default function DateTimePicker({ value, onChange }) {
           <Button
             type="button"
             variant="secondary"
-            className="bg-white text-indigo-700 hover:bg-stone-100"
-            onClick={() => setSlot(null)}
+            size="sm"
+            className="bg-white/20 text-white hover:bg-white/30 border-0 backdrop-blur-sm text-xs font-medium rounded-full px-3"
+            onClick={handleCancelSlot}
             data-testid="cancel-selection-btn"
           >
-            Cancel Selection
+            Change
           </Button>
         </div>
       )}

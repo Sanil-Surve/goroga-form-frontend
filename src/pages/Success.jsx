@@ -1,10 +1,8 @@
 import { Link, useLocation, Navigate } from "react-router-dom";
-import { CheckCircle2, CalendarCheck, ArrowLeft } from "lucide-react";
+import { CheckCircle2, CalendarCheck, ArrowLeft, Clock, Building2, Hash } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const BG =
-  "https://images.unsplash.com/photo-1463134836706-8bcc60f7d78b?crop=entropy&cs=srgb&fm=jpg&q=85&w=1920";
-
+// ── Pure helpers ──────────────────────────────────────────────────────────────
 function fmtTime12(slot) {
   if (!slot) return "";
   const [h, m] = slot.split(":").map(Number);
@@ -16,9 +14,19 @@ function fmtTime12(slot) {
 function fmtFullDate(s) {
   if (!s) return "";
   const [y, m, d] = s.split("-").map(Number);
-  const dt = new Date(y, m - 1, d);
-  return dt.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" });
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+    weekday: "long", month: "long", day: "numeric", year: "numeric",
+  });
 }
+
+// ── Static decorative elements (rendering-hoist-jsx) ─────────────────────────
+const BgOrbs = (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-violet-600/15 blur-3xl" />
+    <div className="absolute -bottom-24 -right-24 w-[400px] h-[400px] rounded-full bg-indigo-600/15 blur-3xl" />
+    <div className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-purple-500/10 blur-2xl" />
+  </div>
+);
 
 export default function Success() {
   const { state } = useLocation();
@@ -26,59 +34,133 @@ export default function Success() {
   if (!appt) return <Navigate to="/" replace />;
 
   return (
-    <div className="min-h-screen relative" data-testid="success-page">
-      <img src={BG} alt="calm" className="absolute inset-0 w-full h-full object-cover opacity-40" />
-      <div className="absolute inset-0 bg-[#F9F8F6]/80" />
-      <div className="relative min-h-screen flex items-center justify-center px-6">
-        <div className="bg-white border border-stone-200 rounded-3xl shadow-sm max-w-xl w-full p-10">
-          <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mb-6">
-            <CheckCircle2 className="w-7 h-7 text-emerald-600" />
-          </div>
-          <p className="text-xs tracking-[0.2em] uppercase font-semibold text-stone-500">Confirmed</p>
-          <h1 className="font-heading text-3xl sm:text-4xl tracking-tight mt-2" data-testid="success-title">
-            Your appointment is booked.
-          </h1>
-          <p className="text-stone-500 mt-3">
-            Hi {appt.first_name}, we're looking forward to seeing you. A summary of your booking is below.
-          </p>
+    <div
+      className="min-h-screen relative flex items-center justify-center px-4 py-12"
+      data-testid="success-page"
+      style={{
+        background: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+      }}
+    >
+      {BgOrbs}
 
-          <div className="mt-8 border border-stone-200 rounded-2xl p-6 bg-stone-50/50">
+      {/* Local background texture using splash image */}
+      <img
+        src="/splash.png"
+        alt=""
+        aria-hidden="true"
+        className="absolute inset-0 w-full h-full object-cover opacity-10 mix-blend-luminosity"
+      />
+
+      <div className="relative z-10 w-full max-w-lg animate-fade-up">
+        {/* ── Success Card ── */}
+        <div
+          className="rounded-3xl p-8 sm:p-10"
+          style={{
+            background: "rgba(255,255,255,0.08)",
+            backdropFilter: "blur(24px) saturate(180%)",
+            WebkitBackdropFilter: "blur(24px) saturate(180%)",
+            border: "1px solid rgba(255,255,255,0.14)",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.14)",
+          }}
+        >
+          {/* ── Animated check icon ── */}
+          <div className="flex justify-center mb-7">
+            <div
+              className="w-20 h-20 rounded-full flex items-center justify-center animate-pulse-ring"
+              style={{ background: "linear-gradient(135deg, #6d28d9, #4f46e5)" }}
+            >
+              <CheckCircle2 className="w-10 h-10 text-white animate-check-pop" />
+            </div>
+          </div>
+
+          {/* ── Heading ── */}
+          <div className="text-center mb-8">
+            <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-violet-300/70">
+              Confirmed
+            </span>
+            <h1
+              className="text-3xl sm:text-4xl font-bold text-white tracking-tight mt-2 leading-tight"
+              data-testid="success-title"
+            >
+              You're all set!
+            </h1>
+            <p className="text-white/50 mt-2.5 text-sm leading-relaxed">
+              Hi <span className="text-white/80 font-medium">{appt.first_name}</span>, your appointment
+              is confirmed. A summary is below.
+            </p>
+          </div>
+
+          {/* ── Booking Details Card ── */}
+          <div
+            className="rounded-2xl p-5 mb-7 space-y-4"
+            style={{
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.1)",
+            }}
+          >
+            {/* Date/time row */}
             <div className="flex items-start gap-3">
-              <CalendarCheck className="w-5 h-5 text-indigo-700 mt-0.5" />
+              <div className="w-8 h-8 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <CalendarCheck className="w-4 h-4 text-violet-300" />
+              </div>
               <div>
-                <p className="text-sm text-stone-500">When</p>
-                <p className="font-heading text-xl text-stone-900" data-testid="success-datetime">
+                <p className="text-[11px] text-white/40 uppercase tracking-[0.15em] font-semibold">When</p>
+                <p
+                  className="text-white font-semibold text-base mt-0.5"
+                  data-testid="success-datetime"
+                >
                   {fmtTime12(appt.slot)} · {fmtFullDate(appt.date)}
                 </p>
               </div>
             </div>
-            <div className="mt-5 grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="text-stone-500">Name</p>
-                <p className="text-stone-900">{appt.first_name} {appt.last_name}</p>
+
+            <div className="h-px bg-white/8" />
+
+            {/* Detail grid */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Clock className="w-3 h-3 text-white/50" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-white/40 uppercase tracking-[0.12em] font-semibold">Name</p>
+                  <p className="text-white/80 text-sm font-medium mt-0.5">{appt.first_name} {appt.last_name}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-stone-500">Email</p>
-                <p className="text-stone-900 break-all">{appt.email}</p>
+              <div className="flex items-start gap-2">
+                <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Building2 className="w-3 h-3 text-white/50" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-white/40 uppercase tracking-[0.12em] font-semibold">Company</p>
+                  <p className="text-white/80 text-sm font-medium mt-0.5">{appt.company}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-stone-500">Company</p>
-                <p className="text-stone-900">{appt.company}</p>
-              </div>
-              <div>
-                <p className="text-stone-500">Booking ID</p>
-                <p className="text-stone-900 font-mono text-xs">{appt.id.slice(0, 8)}</p>
+              <div className="col-span-2 flex items-start gap-2">
+                <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Hash className="w-3 h-3 text-white/50" />
+                </div>
+                <div>
+                  <p className="text-[11px] text-white/40 uppercase tracking-[0.12em] font-semibold">Booking ID</p>
+                  <p className="text-white/50 text-xs font-mono mt-0.5">{appt.id.slice(0, 8).toUpperCase()}</p>
+                </div>
               </div>
             </div>
           </div>
 
+          {/* ── Email notice ── */}
+          <p className="text-center text-xs text-white/35 mb-6">
+            A confirmation has been sent to <span className="text-white/55">{appt.email}</span>
+          </p>
+
+          {/* ── Back button ── */}
           <Link to="/">
             <Button
               variant="outline"
               data-testid="back-home-btn"
-              className="mt-8 rounded-full border-stone-300 text-stone-700 hover:bg-stone-100"
+              className="w-full rounded-full border-white/20 text-white/70 hover:text-white hover:bg-white/10 hover:border-white/30 transition-all"
             >
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back to home
+              <ArrowLeft className="w-4 h-4 mr-2" /> Book another session
             </Button>
           </Link>
         </div>
