@@ -22,9 +22,18 @@ function fmtFullDate(s) {
 // ── Static decorative elements (rendering-hoist-jsx) ─────────────────────────
 const BgOrbs = (
   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-violet-600/15 blur-3xl" />
-    <div className="absolute -bottom-24 -right-24 w-[400px] h-[400px] rounded-full bg-indigo-600/15 blur-3xl" />
-    <div className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full bg-purple-500/10 blur-2xl" />
+    <div
+      className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full blur-3xl"
+      style={{ background: "rgba(36,177,177,0.15)" }}
+    />
+    <div
+      className="absolute -bottom-24 -right-24 w-[400px] h-[400px] rounded-full blur-3xl"
+      style={{ background: "rgba(0,121,121,0.18)" }}
+    />
+    <div
+      className="absolute top-1/3 right-1/4 w-64 h-64 rounded-full blur-2xl"
+      style={{ background: "rgba(36,177,177,0.08)" }}
+    />
   </div>
 );
 
@@ -38,7 +47,7 @@ export default function Success() {
       className="min-h-screen relative flex items-center justify-center px-4 py-12"
       data-testid="success-page"
       style={{
-        background: "linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)",
+        background: "linear-gradient(135deg, #003f3f 0%, #007979 50%, #005555 100%)",
       }}
     >
       {BgOrbs}
@@ -67,7 +76,7 @@ export default function Success() {
           <div className="flex justify-center mb-7">
             <div
               className="w-20 h-20 rounded-full flex items-center justify-center animate-pulse-ring"
-              style={{ background: "linear-gradient(135deg, #6d28d9, #4f46e5)" }}
+              style={{ background: "linear-gradient(135deg, #007979, #24B1B1)" }}
             >
               <CheckCircle2 className="w-10 h-10 text-white animate-check-pop" />
             </div>
@@ -75,7 +84,10 @@ export default function Success() {
 
           {/* ── Heading ── */}
           <div className="text-center mb-8">
-            <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-violet-300/70">
+            <span
+              className="text-[10px] tracking-[0.22em] uppercase font-semibold"
+              style={{ color: "rgba(36,177,177,0.75)" }}
+            >
               Confirmed
             </span>
             <h1
@@ -100,8 +112,11 @@ export default function Success() {
           >
             {/* Date/time row */}
             <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-xl bg-violet-500/20 flex items-center justify-center flex-shrink-0">
-                <CalendarCheck className="w-4 h-4 text-violet-300" />
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "rgba(36,177,177,0.2)" }}
+              >
+                <CalendarCheck className="w-4 h-4" style={{ color: "#24B1B1" }} />
               </div>
               <div>
                 <p className="text-[11px] text-white/40 uppercase tracking-[0.15em] font-semibold">When</p>
