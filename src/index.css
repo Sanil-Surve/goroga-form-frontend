@@ -131,16 +131,21 @@ code {
   100% { transform: scale(1); opacity: 1; }
 }
 @keyframes pulseRing {
-  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(109, 40, 217, 0.4); }
-  70%  { transform: scale(1);    box-shadow: 0 0 0 14px rgba(109, 40, 217, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(109, 40, 217, 0); }
+  0%   { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(36, 177, 177, 0.4); }
+  70%  { transform: scale(1);    box-shadow: 0 0 0 14px rgba(36, 177, 177, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(36, 177, 177, 0); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 @layer utilities {
-  .animate-fade-up   { animation: fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
-  .animate-scale-in  { animation: scaleIn 0.35s cubic-bezier(0.16,1,0.3,1) both; }
-  .animate-check-pop { animation: checkPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both; }
+  .animate-fade-up    { animation: fadeUp 0.45s cubic-bezier(0.16,1,0.3,1) both; }
+  .animate-scale-in   { animation: scaleIn 0.35s cubic-bezier(0.16,1,0.3,1) both; }
+  .animate-check-pop  { animation: checkPop 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.1s both; }
   .animate-pulse-ring { animation: pulseRing 2s infinite; }
+  .animate-slide-down { animation: slideDown 0.3s cubic-bezier(0.16,1,0.3,1) both; }
 
   /* ─── Glassmorphism card (appointment form) ──────────────── */
   .glass-card {
@@ -244,59 +249,81 @@ code {
 
   /* ─── Admin layout ───────────────────────────────────────── */
   .admin-bg {
-    background: #f5f4f1;
+    background: #f0fafa;
+    background-image: radial-gradient(circle, rgba(36,177,177,0.06) 1px, transparent 1px);
+    background-size: 28px 28px;
     min-height: 100vh;
   }
 
   .admin-header {
-    background: #ffffff;
-    border-bottom: 1px solid #e7e5e0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.03);
+    background: linear-gradient(160deg, #007979 0%, #24B1B1 100%);
+    border-bottom: none;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 24px rgba(0,121,121,0.22), 0 1px 0 rgba(255,255,255,0.1) inset;
   }
 
   .admin-card {
-    background: #ffffff;
-    border: 1px solid #e7e5e0;
-    border-radius: 16px;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-    transition: box-shadow 0.2s;
+    background: rgba(255,255,255,0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(36,177,177,0.12);
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0,121,121,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    transition: box-shadow 0.22s, transform 0.22s;
   }
   .admin-card:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.07);
+    box-shadow: 0 8px 32px rgba(0,121,121,0.12), 0 2px 8px rgba(0,0,0,0.06);
   }
 
   .stat-card {
     background: #ffffff;
-    border: 1px solid #e7e5e0;
-    border-radius: 16px;
-    padding: 1.25rem 1.5rem;
+    border-radius: 20px;
+    padding: 1.35rem 1.5rem;
     position: relative;
     overflow: hidden;
-    transition: transform 0.18s, box-shadow 0.18s;
+    transition: transform 0.2s cubic-bezier(0.16,1,0.3,1), box-shadow 0.2s;
+    border: 1px solid transparent;
   }
   .stat-card::before {
     content: '';
     position: absolute;
     top: 0; left: 0; right: 0;
-    height: 3px;
-    border-radius: 16px 16px 0 0;
+    height: 4px;
+    border-radius: 20px 20px 0 0;
+  }
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    bottom: -20px; right: -20px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    opacity: 0.06;
   }
   .stat-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.09);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(0,121,121,0.15);
   }
-  .stat-card-total::before    { background: linear-gradient(90deg, #6366f1, #8b5cf6); }
-  .stat-card-booked::before   { background: linear-gradient(90deg, #4f46e5, #6d28d9); }
+  .stat-card-total::before    { background: linear-gradient(90deg, #007979, #24B1B1); }
+  .stat-card-total::after     { background: #007979; }
+  .stat-card-total            { box-shadow: 0 2px 12px rgba(0,121,121,0.10); border-color: rgba(0,121,121,0.1); }
+  .stat-card-booked::before   { background: linear-gradient(90deg, #24B1B1, #5ee7e7); }
+  .stat-card-booked::after    { background: #24B1B1; }
+  .stat-card-booked           { box-shadow: 0 2px 12px rgba(36,177,177,0.10); border-color: rgba(36,177,177,0.1); }
   .stat-card-completed::before { background: linear-gradient(90deg, #059669, #10b981); }
-  .stat-card-cancelled::before { background: linear-gradient(90deg, #9ca3af, #d1d5db); }
+  .stat-card-completed::after  { background: #059669; }
+  .stat-card-completed         { box-shadow: 0 2px 12px rgba(5,150,105,0.10); border-color: rgba(5,150,105,0.1); }
+  .stat-card-cancelled::before { background: linear-gradient(90deg, #94a3b8, #cbd5e1); }
+  .stat-card-cancelled::after  { background: #94a3b8; }
+  .stat-card-cancelled         { box-shadow: 0 2px 8px rgba(0,0,0,0.05); border-color: rgba(148,163,184,0.15); }
 
   /* ─── Table ──────────────────────────────────────────────── */
   .admin-table-row {
     transition: background 0.15s;
-    border-bottom: 1px solid #f0ede8;
+    border-bottom: 1px solid rgba(36,177,177,0.07);
   }
   .admin-table-row:hover {
-    background: #faf9f7;
+    background: rgba(36,177,177,0.03);
   }
   .admin-table-row:last-child {
     border-bottom: none;
@@ -307,8 +334,8 @@ code {
     display: inline-flex;
     align-items: center;
     gap: 2px;
-    background: #f5f4f1;
-    border: 1px solid #e7e5e0;
+    background: rgba(240,250,250,0.9);
+    border: 1px solid rgba(36,177,177,0.18);
     border-radius: 999px;
     padding: 2px;
   }
