@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
 import {
   LogOut,
@@ -16,6 +17,7 @@ import {
   RotateCcw,
   ChevronDown,
   ChevronUp,
+  FileDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -384,6 +386,48 @@ export default function AdminDashboard() {
 
   const hasFilters = statusFilter !== "all" || dateFrom || dateTo || q;
 
+  const exportToExcel = useCallback(() => {
+    if (items.length === 0) {
+      toast.info("No data to export");
+      return;
+    }
+
+    const rows = items.map((a) => ({
+      Date: fmtDate(a.date),
+      Time: fmtTime12(a.slot),
+      "First Name": a.first_name,
+      "Last Name": a.last_name,
+      Designation: a.designation,
+      Company: a.company,
+      Email: a.email,
+      Phone: a.phone,
+      Concerns: (a.concerns || []).map((c) => CONCERN_LABELS[c] || c).join(", "),
+      Status: a.status.charAt(0).toUpperCase() + a.status.slice(1),
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+
+    // Auto-size columns
+    const colWidths = Object.keys(rows[0]).map((key) => ({
+      wch: Math.max(
+        key.length,
+        ...rows.map((r) => String(r[key] ?? "").length)
+      ),
+    }));
+    ws["!cols"] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Appointments");
+
+    const timestamp = new Date()
+      .toISOString()
+      .slice(0, 16)
+      .replace("T", "_")
+      .replace(":", "-");
+    XLSX.writeFile(wb, `appointments_${timestamp}.xlsx`);
+    toast.success(`Exported ${items.length} appointment${items.length !== 1 ? "s" : ""}`);
+  }, [items]);
+
   return (
     <div className="admin-bg" data-testid="admin-dashboard-page">
 
@@ -424,15 +468,27 @@ export default function AdminDashboard() {
               Appointments
             </h1>
           </div>
-          <Button
-            variant="outline"
-            onClick={load}
-            data-testid="refresh-btn"
-            className="rounded-full border-stone-300 text-stone-600 hover:text-stone-900 hover:bg-stone-100 gap-1.5 text-xs sm:text-sm px-3 sm:px-4"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Refresh</span>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={load}
+              data-testid="refresh-btn"
+              className="rounded-full border-stone-300 text-stone-600 hover:text-stone-900 hover:bg-stone-100 gap-1.5 text-xs sm:text-sm px-3 sm:px-4"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportToExcel}
+              data-testid="export-excel-btn"
+              disabled={loading || items.length === 0}
+              className="rounded-full border-emerald-300 text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 gap-1.5 text-xs sm:text-sm px-3 sm:px-4"
+            >
+              <FileDown className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Export</span>
+            </Button>
+          </div>
         </div>
 
         {/* ── Stats Grid ── */}
