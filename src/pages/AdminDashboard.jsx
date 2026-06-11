@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { useNavigate } from "react-router-dom";
+import { useDispatch, useSelector } from "react-redux";
 import {
   LogOut,
   Search,
@@ -9,7 +10,6 @@ import {
   XCircle,
   Trash2,
   Loader2,
-  CalendarDays,
   BookCheck,
   Ban,
   Archive,
@@ -48,9 +48,39 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { api, formatApiErrorDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
+
+import {
+  fetchAppointments,
+  updateAppointmentStatus,
+  deleteAppointment,
+  setStatusFilter,
+  setDateFrom,
+  setDateTo,
+  setQ,
+  setPage,
+  setPageSize,
+  toggleFiltersOpen,
+  resetFilters,
+  openDeleteConfirm,
+  closeDeleteConfirm,
+  selectItems,
+  selectStats,
+  selectTotal,
+  selectAdminStatus,
+  selectStatusFilter,
+  selectDateFrom,
+  selectDateTo,
+  selectQ,
+  selectFiltersOpen,
+  selectConfirmDeleteId,
+  selectPage,
+  selectPageSize,
+  selectTotalPages,
+  selectHasFilters,
+} from "@/store/slices/adminSlice";
+import { useDebounce } from "@/hooks/useDebounce";
 
 // ── Module-level constants (rendering-hoist-jsx) ──────────────────────────────
 const CONCERN_LABELS = {
@@ -76,10 +106,10 @@ const STATUS_DOT = {
 };
 
 const STAT_CONFIG = [
-  { key: "total",     label: "Total",     icon: TrendingUp,  colorClass: "stat-card-total",     valueClass: "text-teal-700" },
-  { key: "booked",    label: "Booked",    icon: BookCheck,   colorClass: "stat-card-booked",    valueClass: "text-cyan-700" },
-  { key: "completed", label: "Completed", icon: CheckCircle2,colorClass: "stat-card-completed", valueClass: "text-emerald-700" },
-  { key: "cancelled", label: "Cancelled", icon: Ban,         colorClass: "stat-card-cancelled", valueClass: "text-slate-400" },
+  { key: "total",     label: "Total",     icon: TrendingUp,   colorClass: "stat-card-total",     valueClass: "text-teal-700" },
+  { key: "booked",    label: "Booked",    icon: BookCheck,    colorClass: "stat-card-booked",    valueClass: "text-cyan-700" },
+  { key: "completed", label: "Completed", icon: CheckCircle2, colorClass: "stat-card-completed", valueClass: "text-emerald-700" },
+  { key: "cancelled", label: "Cancelled", icon: Ban,          colorClass: "stat-card-cancelled", valueClass: "text-slate-400" },
 ];
 
 // Decorative background orbs — hoisted (rendering-hoist-jsx)
@@ -156,6 +186,7 @@ function ActionButtons({ appt, onUpdateStatus, onDeleteRequest }) {
 }
 
 // ── Mobile Card ───────────────────────────────────────────────────────────────
+
 function MobileAppointmentCard({ appt, onUpdateStatus, onDeleteRequest }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -332,97 +363,169 @@ const MobileLoadingState = (
   </div>
 );
 
+// ── Pagination Button ─────────────────────────────────────────────────────────
+function PaginationBtn({ onClick, disabled, active, children, label }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        "inline-flex items-center justify-center min-w-[34px] h-[34px] px-2 rounded-xl text-xs font-semibold",
+        "transition-all duration-150 border",
+        active
+          ? "text-white border-transparent"
+          : "bg-white border-teal-100 text-stone-600 hover:border-teal-300 hover:text-teal-700 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-teal-100 disabled:hover:text-stone-600",
+      ].join(" ")}
+      style={active ? { background: "linear-gradient(135deg,#24B1B1 0%,#007979 100%)", boxShadow: "0 2px 8px rgba(36,177,177,0.35)" } : {}}
+    >
+      {children}
+    </button>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
-  const navigate = useNavigate();
+  const navigate   = useNavigate();
+  const dispatch   = useDispatch();
   const { user, logout } = useAuth();
-  const [items, setItems] = useState([]);
-  const [stats, setStats] = useState({ total: 0, booked: 0, completed: 0, cancelled: 0 });
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [q, setQ] = useState("");
-  const [confirm, setConfirm] = useState(null);
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // rerender-derived-state — derive params during render, not in effect
+  // ── Redux state ──────────────────────────────────────────────────────────────
+  const items           = useSelector(selectItems);
+  const stats           = useSelector(selectStats);
+  const total           = useSelector(selectTotal);
+  const adminStatus     = useSelector(selectAdminStatus);
+  const statusFilter    = useSelector(selectStatusFilter);
+  const dateFrom        = useSelector(selectDateFrom);
+  const dateTo          = useSelector(selectDateTo);
+  const q               = useSelector(selectQ);          // committed (debounced) value
+  const filtersOpen     = useSelector(selectFiltersOpen);
+  const confirmDeleteId = useSelector(selectConfirmDeleteId);
+  const hasFilters      = useSelector(selectHasFilters);
+  const page            = useSelector(selectPage);
+  const pageSize        = useSelector(selectPageSize);
+  const totalPages      = useSelector(selectTotalPages);
+
+  const loading = adminStatus === "loading";
+
+  // ── Local input state for responsive typing + debounce ───────────────────────
+  // `inputQ` updates immediately (fast UI), `debouncedQ` updates after 450 ms
+  // silence, then commits to Redux which triggers the API call.
+  const [inputQ, setInputQ] = useState(q);
+  const debouncedQ = useDebounce(inputQ, 450);
+
+  // Commit debounced value to Redux (fires API) only when it settles
+  useEffect(() => {
+    if (debouncedQ !== q) dispatch(setQ(debouncedQ));
+  }, [debouncedQ]); // intentionally omit q/dispatch – we only want to react to the debounced value
+
+  // Keep inputQ in sync when reset action clears q from outside (e.g. Reset filters)
+  useEffect(() => {
+    setInputQ(q);
+  }, [q]);
+
+  // ── Build query params (derived during render — rerender-derived-state) ──────
   const params = useMemo(() => {
-    const p = {};
+    const p = { page, page_size: pageSize };
     if (statusFilter && statusFilter !== "all") p.status = statusFilter;
     if (dateFrom) p.date_from = dateFrom;
-    if (dateTo) p.date_to = dateTo;
+    if (dateTo)   p.date_to = dateTo;
     if (q.trim()) p.q = q.trim();
     return p;
-  }, [statusFilter, dateFrom, dateTo, q]);
+  }, [statusFilter, dateFrom, dateTo, q, page, pageSize]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data } = await api.get("/admin/appointments", { params });
-      setItems(data.items || []);
-      setStats(data.stats || { total: 0, booked: 0, completed: 0, cancelled: 0 });
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Failed to load");
-    } finally {
-      setLoading(false);
-    }
-  }, [params]);
+  // ── Fetch on param change ────────────────────────────────────────────────────
+  const load = useCallback(() => {
+    dispatch(fetchAppointments(params));
+  }, [dispatch, params]);
 
   useEffect(() => { load(); }, [load]);
 
-  const updateStatus = useCallback(async (id, newStatus) => {
-    try {
-      await api.patch(`/admin/appointments/${id}/status`, { status: newStatus });
-      toast.success(`Marked as ${newStatus}`);
-      load();
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Update failed");
+  // ── Toast on error — use a ref so it fires once per distinct error ────────────
+  const adminError = useSelector((state) => state.admin.error);
+  const lastAdminError = useRef(null);
+  useEffect(() => {
+    if (adminStatus === "failed" && adminError && adminError !== lastAdminError.current) {
+      lastAdminError.current = adminError;
+      toast.error(adminError);
     }
-  }, [load]);
+    if (adminStatus !== "failed") lastAdminError.current = null;
+  }, [adminStatus, adminError]);
 
-  const handleDelete = useCallback(async (id) => {
-    try {
-      await api.delete(`/admin/appointments/${id}`);
-      toast.success("Appointment deleted");
-      load();
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Delete failed");
-    }
-  }, [load]);
+  // ── Stable action callbacks ──────────────────────────────────────────────────
+  const handleUpdateStatus = useCallback(
+    async (id, newStatus) => {
+      const result = await dispatch(updateAppointmentStatus({ id, newStatus }));
+      if (updateAppointmentStatus.fulfilled.match(result)) {
+        toast.success(`Marked as ${newStatus}`);
+        dispatch(fetchAppointments(params));
+      } else {
+        toast.error(result.payload || "Update failed");
+      }
+    },
+    [dispatch, params]
+  );
 
-  const openDeleteConfirm = useCallback((id) => setConfirm({ id }), []);
+  const handleDelete = useCallback(
+    async (id) => {
+      const result = await dispatch(deleteAppointment(id));
+      if (deleteAppointment.fulfilled.match(result)) {
+        toast.success("Appointment deleted");
+      } else {
+        toast.error(result.payload || "Delete failed");
+      }
+    },
+    [dispatch]
+  );
+
+  const handleOpenDeleteConfirm = useCallback(
+    (id) => dispatch(openDeleteConfirm(id)),
+    [dispatch]
+  );
 
   const handleLogout = useCallback(() => {
     logout();
     navigate("/admin/login");
   }, [logout, navigate]);
 
-  const resetFilters = useCallback(() => {
-    setStatusFilter("all");
-    setDateFrom("");
-    setDateTo("");
-    setQ("");
-  }, []);
+  const handleResetFilters = useCallback(() => {
+    dispatch(resetFilters());
+    // inputQ will sync via the useEffect above when q resets to ""
+  }, [dispatch]);
 
-  const hasFilters = statusFilter !== "all" || dateFrom || dateTo || q;
+  // ── Pagination helpers ───────────────────────────────────────────────────────
+  const goToPage = useCallback((p) => dispatch(setPage(p)), [dispatch]);
 
+  // Build visible page numbers with ellipsis for large page counts
+  const pageNumbers = useMemo(() => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    const pages = new Set([1, totalPages, page]);
+    if (page > 1) pages.add(page - 1);
+    if (page < totalPages) pages.add(page + 1);
+    // Always show first 2 and last 2
+    pages.add(2);
+    pages.add(totalPages - 1);
+    return [...pages].sort((a, b) => a - b);
+  }, [totalPages, page]);
+
+  // ── Excel export ─────────────────────────────────────────────────────────────
   const exportToExcel = useCallback(() => {
     if (items.length === 0) {
       toast.info("No data to export");
       return;
     }
     const rows = items.map((a) => ({
-      Date: fmtDate(a.date),
-      Time: fmtTime12(a.slot),
+      Date:         fmtDate(a.date),
+      Time:         fmtTime12(a.slot),
       "First Name": a.first_name,
-      "Last Name": a.last_name,
-      Designation: a.designation,
-      Company: a.company,
-      Email: a.email,
-      Phone: a.phone,
-      Concerns: (a.concerns || []).map((c) => CONCERN_LABELS[c] || c).join(", "),
-      Status: a.status.charAt(0).toUpperCase() + a.status.slice(1),
+      "Last Name":  a.last_name,
+      Designation:  a.designation,
+      Company:      a.company,
+      Email:        a.email,
+      Phone:        a.phone,
+      Concerns:     (a.concerns || []).map((c) => CONCERN_LABELS[c] || c).join(", "),
+      Status:       a.status.charAt(0).toUpperCase() + a.status.slice(1),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
     const colWidths = Object.keys(rows[0]).map((key) => ({
@@ -442,7 +545,7 @@ export default function AdminDashboard() {
 
       {/* ── Sticky Header ── */}
       <header className="admin-header sticky top-0 z-40">
-        {/* subtle dot overlay — contained by position:relative + overflow:hidden on .admin-header */}
+        {/* subtle dot overlay */}
         <div
           className="absolute inset-0 pointer-events-none"
           style={{
@@ -467,15 +570,9 @@ export default function AdminDashboard() {
             />
             <div
               className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full"
-              style={{
-                background: "rgba(255,255,255,0.15)",
-                border: "1px solid rgba(255,255,255,0.28)",
-              }}
+              style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)" }}
             >
-              <span
-                className="w-1.5 h-1.5 rounded-full"
-                style={{ background: "#a7f3d0" }}
-              />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#a7f3d0" }} />
               <span
                 className="text-[10px] tracking-[0.2em] uppercase font-semibold"
                 style={{ color: "rgba(255,255,255,0.92)" }}
@@ -487,7 +584,6 @@ export default function AdminDashboard() {
 
           {/* ── Right: Email + Logout ── */}
           <div className="flex items-center gap-3">
-            {/* Divider */}
             <div className="hidden md:flex flex-col items-end">
               <span
                 className="text-[10px] tracking-[0.1em] uppercase font-semibold"
@@ -503,10 +599,7 @@ export default function AdminDashboard() {
               </span>
             </div>
 
-            <div
-              className="hidden md:block w-px h-8 mx-1"
-              style={{ background: "rgba(255,255,255,0.2)" }}
-            />
+            <div className="hidden md:block w-px h-8 mx-1" style={{ background: "rgba(255,255,255,0.2)" }} />
 
             <button
               onClick={handleLogout}
@@ -531,10 +624,7 @@ export default function AdminDashboard() {
         {/* ── Page Title + Actions ── */}
         <div className="flex items-center justify-between mb-6 sm:mb-8 animate-fade-up">
           <div>
-            <p
-              className="text-[11px] tracking-[0.22em] uppercase font-semibold mb-1"
-              style={{ color: "#007979" }}
-            >
+            <p className="text-[11px] tracking-[0.22em] uppercase font-semibold mb-1" style={{ color: "#007979" }}>
               Admin Portal
             </p>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-stone-900">
@@ -574,7 +664,7 @@ export default function AdminDashboard() {
           {STAT_CONFIG.map(({ key, label, icon: Icon, colorClass, valueClass }, idx) => (
             <div
               key={key}
-              className={`stat-card animate-fade-up`}
+              className="stat-card animate-fade-up"
               style={{ animationDelay: `${idx * 60}ms` }}
               data-testid={`stat-${label.toLowerCase()}`}
             >
@@ -603,22 +693,16 @@ export default function AdminDashboard() {
           {/* Filter header — collapsible on mobile */}
           <button
             type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
+            onClick={() => dispatch(toggleFiltersOpen())}
             className="w-full flex items-center justify-between p-4 sm:p-5 sm:cursor-default"
           >
             <div className="flex items-center gap-2">
               <SlidersHorizontal className="w-3.5 h-3.5" style={{ color: "#24B1B1" }} />
-              <span
-                className="text-xs tracking-[0.15em] uppercase font-semibold"
-                style={{ color: "#007979" }}
-              >
+              <span className="text-xs tracking-[0.15em] uppercase font-semibold" style={{ color: "#007979" }}>
                 Filters
               </span>
               {hasFilters && (
-                <span
-                  className="w-2 h-2 rounded-full animate-pulse-ring"
-                  style={{ background: "#24B1B1" }}
-                />
+                <span className="w-2 h-2 rounded-full animate-pulse-ring" style={{ background: "#24B1B1" }} />
               )}
             </div>
             <ChevronDown
@@ -630,28 +714,28 @@ export default function AdminDashboard() {
           {/* Filter body */}
           <div className={`px-4 pb-4 sm:px-5 sm:pb-5 sm:pt-0 sm:block ${filtersOpen ? "block" : "hidden"}`}>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {/* Search */}
+              {/* Search — local inputQ for instant feedback, debounced → Redux → API */}
               <div className="sm:col-span-2 relative">
-                <Search
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4"
-                  style={{ color: "#24B1B1" }}
-                />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#24B1B1" }} />
                 <Input
                   placeholder="Search name, email, company…"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  value={inputQ}
+                  onChange={(e) => setInputQ(e.target.value)}
                   data-testid="filter-search"
                   className="pl-9 h-10 rounded-xl text-sm bg-teal-50/50 border-teal-100 placeholder:text-stone-300 focus-visible:ring-0"
-                  style={{ "--tw-ring-color": "rgba(36,177,177,0.2)" }}
                 />
+                {/* Subtle indicator that a debounced search is pending */}
+                {inputQ !== q && (
+                  <span
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full animate-pulse"
+                    style={{ background: "#24B1B1" }}
+                  />
+                )}
               </div>
 
               {/* Status */}
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger
-                  className="h-10 rounded-xl text-sm bg-teal-50/50 border-teal-100"
-                  data-testid="filter-status"
-                >
+              <Select value={statusFilter} onValueChange={(v) => dispatch(setStatusFilter(v))}>
+                <SelectTrigger className="h-10 rounded-xl text-sm bg-teal-50/50 border-teal-100" data-testid="filter-status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -670,7 +754,7 @@ export default function AdminDashboard() {
                 <Input
                   type="date"
                   value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
+                  onChange={(e) => dispatch(setDateFrom(e.target.value))}
                   data-testid="filter-date-from"
                   className="h-10 rounded-xl text-sm bg-teal-50/50 border-teal-100"
                 />
@@ -684,7 +768,7 @@ export default function AdminDashboard() {
                 <Input
                   type="date"
                   value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
+                  onChange={(e) => dispatch(setDateTo(e.target.value))}
                   data-testid="filter-date-to"
                   className="h-10 rounded-xl text-sm bg-teal-50/50 border-teal-100"
                 />
@@ -694,7 +778,7 @@ export default function AdminDashboard() {
             {hasFilters && (
               <div className="flex justify-end mt-3">
                 <button
-                  onClick={resetFilters}
+                  onClick={handleResetFilters}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold transition-colors"
                   data-testid="filter-reset"
                   style={{ color: "#24B1B1" }}
@@ -716,8 +800,8 @@ export default function AdminDashboard() {
                 <MobileAppointmentCard
                   key={a.id}
                   appt={a}
-                  onUpdateStatus={updateStatus}
-                  onDeleteRequest={openDeleteConfirm}
+                  onUpdateStatus={handleUpdateStatus}
+                  onDeleteRequest={handleOpenDeleteConfirm}
                 />
               ))
           }
@@ -751,8 +835,8 @@ export default function AdminDashboard() {
                     <AppointmentRow
                       key={a.id}
                       appt={a}
-                      onUpdateStatus={updateStatus}
-                      onDeleteRequest={openDeleteConfirm}
+                      onUpdateStatus={handleUpdateStatus}
+                      onDeleteRequest={handleOpenDeleteConfirm}
                     />
                   ))
               }
@@ -760,22 +844,87 @@ export default function AdminDashboard() {
           </Table>
         </div>
 
-        {/* Row count */}
-        {!loading && items.length > 0 && (
-          <p className="text-xs mt-3 text-right font-medium" style={{ color: "rgba(0,121,121,0.6)" }}>
-            Showing {items.length} appointment{items.length !== 1 ? "s" : ""}
-          </p>
+        {/* ── Pagination ── */}
+        {!loading && total > 0 && (
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            {/* Left: count summary */}
+            <p className="text-xs font-medium order-2 sm:order-1" style={{ color: "rgba(0,121,121,0.6)" }}>
+              Showing{" "}
+              <span className="font-semibold" style={{ color: "#007979" }}>
+                {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}
+              </span>
+              {" "}of{" "}
+              <span className="font-semibold" style={{ color: "#007979" }}>{total}</span>
+              {" "}appointment{total !== 1 ? "s" : ""}
+            </p>
+
+            {/* Right: page controls */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-1.5 order-1 sm:order-2">
+                {/* Prev */}
+                <PaginationBtn
+                  label="Previous page"
+                  disabled={page === 1}
+                  onClick={() => goToPage(page - 1)}
+                >
+                  <ChevronDown className="w-3.5 h-3.5 rotate-90" />
+                </PaginationBtn>
+
+                {/* Numbered pages with ellipsis */}
+                {pageNumbers.map((p, idx) => {
+                  const prev = pageNumbers[idx - 1];
+                  const showEllipsis = prev && p - prev > 1;
+                  return (
+                    <span key={p} className="flex items-center gap-1.5">
+                      {showEllipsis && (
+                        <span className="text-xs text-stone-400 px-0.5">…</span>
+                      )}
+                      <PaginationBtn
+                        label={`Page ${p}`}
+                        active={p === page}
+                        onClick={() => goToPage(p)}
+                      >
+                        {p}
+                      </PaginationBtn>
+                    </span>
+                  );
+                })}
+
+                {/* Next */}
+                <PaginationBtn
+                  label="Next page"
+                  disabled={page === totalPages}
+                  onClick={() => goToPage(page + 1)}
+                >
+                  <ChevronDown className="w-3.5 h-3.5 -rotate-90" />
+                </PaginationBtn>
+
+                {/* Page size selector */}
+                <select
+                  value={pageSize}
+                  onChange={(e) => dispatch(setPageSize(Number(e.target.value)))}
+                  className="ml-2 h-[34px] rounded-xl text-xs font-medium px-2 border border-teal-100 bg-white text-stone-600 focus:outline-none focus:border-teal-300 cursor-pointer"
+                  aria-label="Rows per page"
+                  data-testid="page-size-select"
+                >
+                  {[5, 10, 25, 50].map((n) => (
+                    <option key={n} value={n}>{n} / page</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         )}
       </main>
 
       {/* ── Delete Confirm Dialog ── */}
-      <AlertDialog open={!!confirm} onOpenChange={(o) => (!o && setConfirm(null))}>
+      <AlertDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(o) => { if (!o) dispatch(closeDeleteConfirm()); }}
+      >
         <AlertDialogContent className="mx-4 rounded-3xl border-0" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}>
           <AlertDialogHeader>
-            <div
-              className="w-10 h-1 rounded-full mb-4"
-              style={{ background: "linear-gradient(90deg, #24B1B1, #007979)" }}
-            />
+            <div className="w-10 h-1 rounded-full mb-4" style={{ background: "linear-gradient(90deg, #24B1B1, #007979)" }} />
             <AlertDialogTitle className="text-stone-900">Delete appointment?</AlertDialogTitle>
             <AlertDialogDescription className="text-stone-400">
               This permanently removes the appointment record and cannot be undone.
@@ -790,7 +939,7 @@ export default function AdminDashboard() {
             </AlertDialogCancel>
             <AlertDialogAction
               data-testid="confirm-delete-confirm"
-              onClick={() => { if (confirm) handleDelete(confirm.id); setConfirm(null); }}
+              onClick={() => { if (confirmDeleteId) handleDelete(confirmDeleteId); }}
               className="rounded-full text-white border-0 font-semibold"
               style={{ background: "linear-gradient(135deg, #ef4444 0%, #dc2626 100%)" }}
             >

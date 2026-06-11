@@ -1,24 +1,35 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { Loader2, ArrowRight } from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import DateTimePicker from "@/components/DateTimePicker";
-import { api, formatApiErrorDetail } from "@/lib/api";
+import {
+  toggleConcern,
+  setPicked,
+  submitAppointment,
+  resetForm,
+  selectConcerns,
+  selectPicked,
+  selectSubmitStatus,
+  selectSubmitError,
+  selectSubmittedAppointment,
+} from "@/store/slices/appointmentSlice";
 
 // ── Static data hoisted to module level (server-hoist-static-io) ─────────────
 const CONCERNS = [
-  { id: "stress",        label: "Stress" },
-  { id: "poor_sleep",    label: "Poor Sleep" },
-  { id: "anxiety",       label: "Anxiety" },
-  { id: "mental_fatigue",label: "Mental Fatigue" },
-  { id: "lack_of_focus", label: "Lack of Focus" },
-  { id: "screen_fatigue",label: "Screen Fatigue" },
-  { id: "other",         label: "Other" },
+  { id: "stress",         label: "Stress" },
+  { id: "poor_sleep",     label: "Poor Sleep" },
+  { id: "anxiety",        label: "Anxiety" },
+  { id: "mental_fatigue", label: "Mental Fatigue" },
+  { id: "lack_of_focus",  label: "Lack of Focus" },
+  { id: "screen_fatigue", label: "Screen Fatigue" },
+  { id: "other",          label: "Other" },
 ];
 
 const HERO_IMG = "/splash.png";
@@ -54,10 +65,17 @@ function GlassField({ id, label, error, children }) {
 }
 
 export default function AppointmentForm() {
-  const navigate = useNavigate();
-  const [concerns, setConcerns] = useState([]);
-  const [picked, setPicked] = useState({ date: null, slot: null });
-  const [submitting, setSubmitting] = useState(false);
+  const navigate   = useNavigate();
+  const dispatch   = useDispatch();
+
+  // ── Redux state ──────────────────────────────────────────────────────────────
+  const concerns            = useSelector(selectConcerns);
+  const picked              = useSelector(selectPicked);
+  const submitStatus        = useSelector(selectSubmitStatus);
+  const submitError         = useSelector(selectSubmitError);
+  const submittedAppointment = useSelector(selectSubmittedAppointment);
+
+  const submitting = submitStatus === "loading";
 
   const {
     register,
@@ -65,12 +83,39 @@ export default function AppointmentForm() {
     formState: { errors },
   } = useForm();
 
-  // Stable callback (rerender-functional-setstate)
-  const toggleConcern = useCallback((id) => {
-    setConcerns((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    );
-  }, []);
+  // ── Navigate on success ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (submitStatus === "succeeded" && submittedAppointment) {
+      navigate("/success", { state: { appointment: submittedAppointment } });
+      // Reset after navigation so the store is clean for next visit
+      dispatch(resetForm());
+    }
+  }, [submitStatus, submittedAppointment, navigate, dispatch]);
+
+  // ── Show toast on error — use a ref so the toast fires exactly once per
+  //    distinct error, not on every re-render while status stays "failed" ────────
+  const lastToastedError = useRef(null);
+  useEffect(() => {
+    if (submitStatus === "failed" && submitError && submitError !== lastToastedError.current) {
+      lastToastedError.current = submitError;
+      toast.error(submitError);
+    }
+    // Clear the sentinel when status leaves "failed" so next error can show again
+    if (submitStatus !== "failed") {
+      lastToastedError.current = null;
+    }
+  }, [submitStatus, submitError]);
+
+  // ── Stable callbacks ─────────────────────────────────────────────────────────
+  const handleToggleConcern = useCallback(
+    (id) => dispatch(toggleConcern(id)),
+    [dispatch]
+  );
+
+  const handlePickedChange = useCallback(
+    (value) => dispatch(setPicked(value)),
+    [dispatch]
+  );
 
   const onSubmit = async (form) => {
     if (concerns.length === 0) {
@@ -81,28 +126,21 @@ export default function AppointmentForm() {
       toast.error("Please select an appointment date and time");
       return;
     }
-    setSubmitting(true);
-    try {
-      const payload = {
-        first_name:    form.first_name,
-        last_name:     form.last_name,
-        email:         form.email,
-        phone:         form.phone,
-        company:       form.company,
-        designation:   form.designation,
-        concerns,
-        other_concern: concerns.includes("other") ? form.other_concern || "" : null,
-        date:          picked.date,
-        slot:          picked.slot,
-      };
-      const { data } = await api.post("/appointments", payload);
-      toast.success("Appointment booked!");
-      navigate("/success", { state: { appointment: data } });
-    } catch (e) {
-      toast.error(formatApiErrorDetail(e.response?.data?.detail) || "Booking failed");
-    } finally {
-      setSubmitting(false);
-    }
+
+    const payload = {
+      first_name:    form.first_name,
+      last_name:     form.last_name,
+      email:         form.email,
+      phone:         form.phone,
+      company:       form.company,
+      designation:   form.designation,
+      concerns,
+      other_concern: concerns.includes("other") ? form.other_concern || "" : null,
+      date:          picked.date,
+      slot:          picked.slot,
+    };
+
+    dispatch(submitAppointment(payload));
   };
 
   return (
@@ -229,7 +267,7 @@ export default function AppointmentForm() {
                     key={c.id}
                     concern={c}
                     active={concerns.includes(c.id)}
-                    onToggle={toggleConcern}
+                    onToggle={handleToggleConcern}
                   />
                 ))}
               </div>
@@ -252,7 +290,7 @@ export default function AppointmentForm() {
                 Appointment Date &amp; Time
               </Label>
               <div className="mt-3">
-                <DateTimePicker value={picked} onChange={setPicked} />
+                <DateTimePicker value={picked} onChange={handlePickedChange} />
               </div>
             </div>
 
