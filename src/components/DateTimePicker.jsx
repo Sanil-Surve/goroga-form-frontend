@@ -31,7 +31,7 @@ function fmtFullDate(d) {
 }
 
 // Hoist static data to module level (server-hoist-static-io)
-const ALLOWED_DATES = ["2026-06-10", "2026-06-11"];
+const ALLOWED_DATES = ["2026-06-11"];
 
 // Stable set for O(1) lookup (js-set-map-lookups)
 const ALLOWED_SET = new Set(ALLOWED_DATES);
@@ -107,7 +107,7 @@ export default function DateTimePicker({ value, onChange }) {
           />
           <p className="text-[11px] text-stone-400 mt-3 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#24B1B1" }} />
-            Available: Jun 10 &amp; Jun 11, 2026 only
+            Available: Jun 11, 2026 only
           </p>
         </div>
 
