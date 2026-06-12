@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, User, Mail, Phone, Building2, Briefcase, Check } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,20 @@ const CONCERNS = [
 
 const HERO_IMG = "/splash.png";
 
+// Decorative background orbs — hoisted (rendering-hoist-jsx)
+const DecorativeOrbs = (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div
+      className="absolute top-1/4 left-10 w-[350px] h-[350px] rounded-full blur-[110px] opacity-25"
+      style={{ background: "rgba(36, 177, 177, 0.15)" }}
+    />
+    <div
+      className="absolute bottom-1/4 right-10 w-[300px] h-[300px] rounded-full blur-[110px] opacity-20"
+      style={{ background: "rgba(139, 92, 246, 0.15)" }}
+    />
+  </div>
+);
+
 // ── Extracted stable component (rerender-no-inline-components) ────────────────
 function ConcernPill({ concern, active, onToggle }) {
   return (
@@ -42,24 +56,34 @@ function ConcernPill({ concern, active, onToggle }) {
       onClick={() => onToggle(concern.id)}
       data-testid={`concern-${concern.id}`}
       className={[
-        "h-11 rounded-full text-sm font-medium transition-all duration-200",
-        active ? "glass-pill-active" : "glass-pill",
+        "h-11 rounded-full text-xs font-semibold uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 px-4 select-none",
+        active ? "glass-pill-active scale-[1.02] border-teal-400 text-white" : "glass-pill text-white/70 hover:text-white hover:scale-[1.01]",
       ].join(" ")}
     >
+      {active ? (
+        <Check className="w-3.5 h-3.5 text-white animate-scale-in" />
+      ) : (
+        <span className="w-1.5 h-1.5 rounded-full bg-teal-400/40" />
+      )}
       {concern.label}
     </button>
   );
 }
 
 // ── Stable field row for label + input pair ───────────────────────────────────
-function GlassField({ id, label, error, children }) {
+function GlassField({ id, label, error, icon: Icon, children }) {
   return (
-    <div>
-      <Label htmlFor={id} className="text-[11px] tracking-[0.18em] uppercase font-semibold glass-label">
+    <div className="group transition-all duration-200">
+      <Label htmlFor={id} className="text-[10px] tracking-[0.2em] uppercase font-bold text-teal-200/70 group-focus-within:text-teal-300 transition-colors">
         {label}
       </Label>
-      <div className="mt-2">{children}</div>
-      {error && <p className="text-xs text-red-300 mt-1.5">{error}</p>}
+      <div className="mt-2 relative">
+        {Icon && (
+          <Icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 group-focus-within:text-teal-400 transition-colors pointer-events-none" />
+        )}
+        {children}
+      </div>
+      {error && <p className="text-xs text-red-300 mt-1.5 font-medium animate-fade-up">{error}</p>}
     </div>
   );
 }
@@ -155,7 +179,8 @@ export default function AppointmentForm() {
       }}
     >
       {/* Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-br from-black/65 via-black/45 to-violet-950/55 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-black/75 via-black/55 to-slate-900/65 pointer-events-none" />
+      {DecorativeOrbs}
 
       {/* Topbar */}
       <div className="relative z-10 flex justify-between items-center px-6 lg:px-12 pt-6">
@@ -189,19 +214,19 @@ export default function AppointmentForm() {
 
             {/* ── Name ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <GlassField id="first_name" label="First Name" error={errors.first_name?.message}>
+              <GlassField id="first_name" label="First Name" error={errors.first_name?.message} icon={User}>
                 <Input
                   id="first_name"
                   data-testid="input-first-name"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("first_name", { required: "Required" })}
                 />
               </GlassField>
-              <GlassField id="last_name" label="Last Name" error={errors.last_name?.message}>
+              <GlassField id="last_name" label="Last Name" error={errors.last_name?.message} icon={User}>
                 <Input
                   id="last_name"
                   data-testid="input-last-name"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("last_name", { required: "Required" })}
                 />
               </GlassField>
@@ -211,21 +236,21 @@ export default function AppointmentForm() {
 
             {/* ── Contact ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <GlassField id="email" label="Email" error={errors.email?.message}>
+              <GlassField id="email" label="Email" error={errors.email?.message} icon={Mail}>
                 <Input
                   id="email"
                   type="email"
                   data-testid="input-email"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("email", { required: "Required" })}
                 />
               </GlassField>
-              <GlassField id="phone" label="Phone Number" error={errors.phone?.message}>
+              <GlassField id="phone" label="Phone Number" error={errors.phone?.message} icon={Phone}>
                 <Input
                   id="phone"
                   type="tel"
                   data-testid="input-phone"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("phone", { required: "Required" })}
                 />
               </GlassField>
@@ -235,19 +260,19 @@ export default function AppointmentForm() {
 
             {/* ── Company ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <GlassField id="company" label="Company" error={errors.company?.message}>
+              <GlassField id="company" label="Company" error={errors.company?.message} icon={Building2}>
                 <Input
                   id="company"
                   data-testid="input-company"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("company", { required: "Required" })}
                 />
               </GlassField>
-              <GlassField id="designation" label="Designation" error={errors.designation?.message}>
+              <GlassField id="designation" label="Designation" error={errors.designation?.message} icon={Briefcase}>
                 <Input
                   id="designation"
                   data-testid="input-designation"
-                  className="glass-input rounded-xl"
+                  className="glass-input rounded-xl pl-10"
                   {...register("designation", { required: "Required" })}
                 />
               </GlassField>
