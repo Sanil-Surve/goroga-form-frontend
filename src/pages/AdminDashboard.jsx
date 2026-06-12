@@ -875,15 +875,10 @@ export default function AdminDashboard() {
           style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)" }}
         />
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          {/* ── Left: Logo + Badge ── */}
-          <div className="flex items-center gap-3">
-            <img
-              src="/gorogaicon.png"
-              alt="Goroga"
-              className="h-10 sm:h-11 w-auto"
-              style={{ filter: "brightness(0) invert(1) drop-shadow(0 1px 3px rgba(0,0,0,0.2))" }}
-            />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 py-3 grid grid-cols-3 items-center">
+
+          {/* ── Left: Admin badge ── */}
+          <div className="flex items-center">
             <div
               className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full"
               style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.28)" }}
@@ -898,8 +893,20 @@ export default function AdminDashboard() {
             </div>
           </div>
 
+          {/* ── Centre: Logo ── */}
+          <div className="flex justify-center">
+            <img
+              src="/gorogaicon.png"
+              alt="Goroga"
+              className="h-16 sm:h-20 w-auto"
+              style={{
+                filter: "brightness(0) invert(1) drop-shadow(0 2px 8px rgba(0,0,0,0.2))",
+              }}
+            />
+          </div>
+
           {/* ── Right: Email + Logout ── */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-end gap-3">
             <div className="hidden md:flex flex-col items-end">
               <span
                 className="text-[10px] tracking-[0.1em] uppercase font-semibold"
