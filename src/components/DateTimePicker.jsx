@@ -30,12 +30,6 @@ function fmtFullDate(d) {
   });
 }
 
-// Hoist static data to module level (server-hoist-static-io)
-const ALLOWED_DATES = ["2026-06-11"];
-
-// Stable set for O(1) lookup (js-set-map-lookups)
-const ALLOWED_SET = new Set(ALLOWED_DATES);
-
 // Static JSX hoisted outside component (rendering-hoist-jsx)
 const EmptyDateState = (
   <div className="h-64 flex flex-col items-center justify-center text-stone-400 text-sm gap-2">
@@ -49,7 +43,19 @@ export default function DateTimePicker({ value, onChange }) {
   const [slot, setSlot] = useState(value?.slot || null);
   const [availability, setAvailability] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [allowedDates, setAllowedDates] = useState([]);
 
+  useEffect(() => {
+    let cancelled = false;
+    api.get("/allowed-dates")
+      .then(({ data }) => {
+        if (!cancelled) setAllowedDates(data || []);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const allowedSet = useMemo(() => new Set(allowedDates), [allowedDates]);
   const dateISO = useMemo(() => (date ? fmtDateISO(date) : null), [date]);
 
   useEffect(() => {
@@ -100,14 +106,27 @@ export default function DateTimePicker({ value, onChange }) {
             mode="single"
             selected={date}
             onSelect={handleDateSelect}
-            disabled={(d) => !ALLOWED_SET.has(fmtDateISO(d))}
+            disabled={(d) => !allowedSet.has(fmtDateISO(d))}
             initialFocus
             data-testid="calendar"
             className="rounded-xl"
           />
           <p className="text-[11px] text-stone-400 mt-3 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ background: "#24B1B1" }} />
-            Available: Jun 11, 2026 only
+            {allowedDates.length === 0 ? (
+              "No available dates"
+            ) : (
+              (() => {
+                const formatted = allowedDates.map((dStr) => {
+                  const [y, m, d] = dStr.split("-").map(Number);
+                  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  });
+                });
+                return `Available: ${formatted.join(", ")}`;
+              })()
+            )}
           </p>
         </div>
 

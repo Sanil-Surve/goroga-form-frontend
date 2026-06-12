@@ -19,10 +19,21 @@ import {
   ChevronUp,
   FileDown,
   TrendingUp,
+  CalendarDays,
+  Plus,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { api } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableHeader,
@@ -749,11 +760,58 @@ function ConcernsBarChart({ items, allConcernsAnalytics }) {
   );
 }
 
-// ── Main component ────────────────────────────────────────────────────────────
 export default function AdminDashboard() {
   const navigate   = useNavigate();
   const dispatch   = useDispatch();
   const { user, logout } = useAuth();
+
+  // ── Allowed Dates State ──────────────────────────────────────────────────────
+  const [allowedDates, setAllowedDates] = useState([]);
+  const [manageDatesOpen, setManageDatesOpen] = useState(false);
+  const [newDateVal, setNewDateVal] = useState("");
+  const [datesLoading, setDatesLoading] = useState(false);
+
+  const fetchAllowedDates = useCallback(async () => {
+    try {
+      const { data } = await api.get("/allowed-dates");
+      setAllowedDates(data || []);
+    } catch (err) {
+      toast.error("Failed to load allowed dates");
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAllowedDates();
+  }, [fetchAllowedDates]);
+
+  const handleAddDate = async (e) => {
+    e.preventDefault();
+    if (!newDateVal) return;
+    try {
+      setDatesLoading(true);
+      await api.post("/admin/allowed-dates", { date: newDateVal });
+      toast.success(`Allowed date ${newDateVal} added`);
+      setNewDateVal("");
+      fetchAllowedDates();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to add date");
+    } finally {
+      setDatesLoading(false);
+    }
+  };
+
+  const handleDeleteDate = async (dateStr) => {
+    try {
+      setDatesLoading(true);
+      await api.delete(`/admin/allowed-dates/${dateStr}`);
+      toast.success(`Removed date ${dateStr}`);
+      fetchAllowedDates();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to remove date");
+    } finally {
+      setDatesLoading(false);
+    }
+  };
 
   // ── Redux state ──────────────────────────────────────────────────────────────
   const items           = useSelector(selectItems);
@@ -1005,6 +1063,16 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setManageDatesOpen(true)}
+              data-testid="manage-dates-btn"
+              className="rounded-full gap-1.5 text-xs sm:text-sm px-3 sm:px-4 h-9 font-medium transition-all hover:-translate-y-[1px]"
+              style={{ borderColor: "rgba(0,121,121,0.25)", color: "#007979", background: "rgba(255,255,255,0.9)" }}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Allowed Dates</span>
+            </Button>
             <Button
               variant="outline"
               onClick={load}
@@ -1323,6 +1391,101 @@ export default function AdminDashboard() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Allowed Dates Settings Dialog ── */}
+      <Dialog open={manageDatesOpen} onOpenChange={setManageDatesOpen}>
+        <DialogContent className="mx-4 rounded-3xl border-0 bg-white/95 backdrop-blur-md max-w-md p-6" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.18)" }}>
+          <DialogHeader>
+            <div className="w-10 h-1 rounded-full mb-4" style={{ background: "linear-gradient(90deg, #24B1B1, #007979)" }} />
+            <DialogTitle className="text-stone-900 text-xl font-bold flex items-center gap-2">
+              <CalendarDays className="w-5 h-5 text-teal-600" />
+              Manage Allowed Booking Dates
+            </DialogTitle>
+            <DialogDescription className="text-stone-400 text-sm mt-1">
+              Users will only be able to select and book appointments on the dates listed below.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* List of Allowed Dates */}
+          <div className="my-4">
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-2">Active Booking Dates</h4>
+            {allowedDates.length === 0 ? (
+              <p className="text-xs text-stone-400 bg-stone-50 p-4 rounded-2xl text-center border border-dashed">
+                No dates configured. Users cannot select any date!
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
+                {allowedDates.map((dateStr) => {
+                  const [y, m, d] = dateStr.split("-").map(Number);
+                  const formatted = new Date(y, m - 1, d).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+                  return (
+                    <Badge
+                      key={dateStr}
+                      variant="secondary"
+                      className="rounded-full pl-3 pr-1 py-1 bg-teal-50 text-teal-800 border border-teal-100 flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      {formatted}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteDate(dateStr)}
+                        disabled={datesLoading}
+                        className="w-4 h-4 rounded-full bg-teal-200/50 hover:bg-teal-200 flex items-center justify-center text-teal-900 transition-colors disabled:opacity-50"
+                        title={`Remove ${dateStr}`}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </Badge>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="h-px bg-stone-100 my-4" />
+
+          {/* Form to Add New Date */}
+          <form onSubmit={handleAddDate} className="space-y-4">
+            <div>
+              <label htmlFor="new-date-input" className="text-xs font-semibold uppercase tracking-wider text-stone-500 block mb-2">
+                Add New Available Date
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  id="new-date-input"
+                  type="date"
+                  value={newDateVal}
+                  onChange={(e) => setNewDateVal(e.target.value)}
+                  disabled={datesLoading}
+                  required
+                  className="rounded-xl border-stone-200 focus:border-teal-500 focus:ring-teal-500 h-10"
+                />
+                <Button
+                  type="submit"
+                  disabled={datesLoading || !newDateVal}
+                  className="rounded-xl h-10 px-4 font-semibold text-white border-0 transition-all active:scale-95 disabled:opacity-50"
+                  style={{
+                    background: "linear-gradient(135deg, #24B1B1 0%, #007979 100%)",
+                    boxShadow: "0 4px 12px rgba(36,177,177,0.3)",
+                  }}
+                >
+                  {datesLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
