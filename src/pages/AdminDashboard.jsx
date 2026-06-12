@@ -93,6 +93,23 @@ const CONCERN_LABELS = {
   other:          "Other",
 };
 
+const CONCERN_DESCRIPTIONS = {
+  stress:
+    "A state of mental or emotional strain caused by demanding situations. It can affect mood, energy levels, and overall well-being.",
+  poor_sleep:
+    "Difficulty falling asleep, staying asleep, or getting restful sleep. Poor sleep can impact concentration, mood, and physical health.",
+  anxiety:
+    "A feeling of excessive worry, nervousness, or fear about everyday situations. It may cause restlessness, tension, and difficulty relaxing.",
+  mental_fatigue:
+    "A state of cognitive exhaustion caused by prolonged mental effort. It can reduce productivity, motivation, and decision-making ability.",
+  lack_of_focus:
+    "Difficulty concentrating on tasks or maintaining attention for extended periods. It can lead to reduced efficiency and increased mistakes.",
+  screen_fatigue:
+    "Eye strain and mental tiredness resulting from prolonged use of digital devices. Common symptoms include headaches, dry eyes, and reduced concentration.",
+  other:
+    "Any concern not listed above that the user wishes to discuss during the session.",
+};
+
 const STATUS_STYLES = {
   booked:    "bg-teal-50 text-teal-700 border-teal-200",
   completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -382,6 +399,305 @@ function PaginationBtn({ onClick, disabled, active, children, label }) {
     >
       {children}
     </button>
+  );
+}
+
+// ── Concerns Bar Chart ───────────────────────────────────────────────────────
+function ConcernsBarChart({ items }) {
+  const [hovered,  setHovered]  = useState(null);
+  const [tooltip,  setTooltip]  = useState(null);
+  const containerRef = useRef(null);
+  // Detect mobile on each render (fine — no SSR here)
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+
+  const data = useMemo(() => {
+    const counts = {};
+    Object.keys(CONCERN_LABELS).forEach((k) => { counts[k] = 0; });
+    items.forEach((appt) => {
+      (appt.concerns || []).forEach((c) => {
+        if (counts[c] !== undefined) counts[c]++;
+        else counts[c] = 1;
+      });
+    });
+    return Object.entries(CONCERN_LABELS).map(([key, label]) => ({
+      key,
+      label,
+      count: counts[key] || 0,
+    }));
+  }, [items]);
+
+  const maxCount = Math.max(...data.map((d) => d.count), 1);
+
+  // ── Responsive chart dimensions ─────────────────────────────────────────────
+  const BAR_W      = isMobile ? 34  : 52;
+  const PAD_L      = isMobile ? 26  : 40;
+  const PAD_R      = 12;
+  const PAD_T      = isMobile ? 18  : 20;
+  const PAD_B      = isMobile ? 44  : 54;
+  const HEIGHT     = isMobile ? 110 : 160;
+  const N          = data.length;
+  const MIN_SLOT_W = BAR_W + (isMobile ? 14 : 22);
+  // Desktop: 900 logical units (SVG stretches to fill card width).
+  // Mobile:  just enough room so every bar is readable; card scrolls horizontally.
+  const TOTAL_VW   = isMobile
+    ? Math.max(N * MIN_SLOT_W + PAD_L + PAD_R, 320)
+    : 900;
+  const SLOT_W     = (TOTAL_VW - PAD_L - PAD_R) / N;
+  const chartH     = HEIGHT + PAD_T + PAD_B;
+  const totalW     = TOTAL_VW;
+
+  // Y-axis ticks (fewer on mobile)
+  const tickCount = Math.min(maxCount, isMobile ? 3 : 5);
+  const ticks = Array.from({ length: tickCount + 1 }, (_, i) =>
+    Math.round((maxCount / tickCount) * i)
+  );
+
+  const barColors = [
+    "#24B1B1", "#20A3A3", "#1C9595", "#178787",
+    "#137979", "#0F6B6B", "#0B5D5D",
+  ];
+
+  // ── Tooltip helpers ──────────────────────────────────────────────────────────
+  const TIP_W = isMobile ? 200 : 260;
+
+  const buildTooltip = useCallback((key, clientX, clientY) => {
+    if (!containerRef.current) return;
+    const rect  = containerRef.current.getBoundingClientRect();
+    const cW    = containerRef.current.offsetWidth;
+    const x     = clientX - rect.left;
+    const y     = clientY - rect.top;
+    // Prefer right-of-cursor; clamp within card (8 px margin each side)
+    const rawL  = x + 14;
+    const useLeft = rawL + TIP_W < cW - 8;
+    const clampedL = Math.max(8, Math.min(rawL, cW - TIP_W - 8));
+    const rawR  = cW - x + 14;
+    const clampedR = Math.max(8, Math.min(rawR, cW - TIP_W - 8));
+    setTooltip({ key, x, y, useLeft, clampedL, clampedR });
+  }, [TIP_W]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!hovered) return;
+    buildTooltip(hovered, e.clientX, e.clientY);
+  }, [hovered, buildTooltip]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHovered(null);
+    setTooltip(null);
+  }, []);
+
+  // Touch: tap bar to show tooltip; tap background to dismiss
+  const handleBarTouch = useCallback((key, e) => {
+    const touch = e.touches[0] || e.changedTouches[0];
+    setHovered(key);
+    if (touch) buildTooltip(key, touch.clientX, touch.clientY);
+  }, [buildTooltip]);
+
+  const handleBgTouch = useCallback((e) => {
+    const tag = e.target.tagName?.toLowerCase();
+    if (tag !== "rect" && tag !== "text") { setHovered(null); setTooltip(null); }
+  }, []);
+
+  return (
+    <div
+      ref={containerRef}
+      className="admin-card animate-fade-up"
+      style={{ animationDelay: "60ms", marginBottom: "1.25rem", position: "relative" }}
+      data-testid="concerns-bar-chart"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onTouchStart={handleBgTouch}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-5 pt-5 pb-4 border-b" style={{ borderColor: "rgba(36,177,177,0.1)" }}>
+        <div
+          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: "rgba(240,250,250,0.9)", border: "1px solid rgba(36,177,177,0.2)" }}
+        >
+          <TrendingUp className="w-3.5 h-3.5" style={{ color: "#24B1B1" }} />
+        </div>
+        <div>
+          <p className="text-xs tracking-[0.18em] uppercase font-semibold" style={{ color: "#007979" }}>
+            Concerns Overview
+          </p>
+          <p className="text-[11px] text-stone-400 font-medium mt-0.5">
+            Users reported per concern · current page
+          </p>
+        </div>
+      </div>
+
+      {/* ── Tooltip ── */}
+      {tooltip && hovered && (() => {
+        const d    = data.find((d) => d.key === tooltip.key);
+        const desc = CONCERN_DESCRIPTIONS[tooltip.key];
+        if (!d) return null;
+        const { useLeft, clampedL, clampedR } = tooltip;
+        return (
+          <div
+            style={{
+              position:      "absolute",
+              top:           tooltip.y - 12,
+              ...(useLeft ? { left: clampedL } : { right: clampedR }),
+              width:         TIP_W,
+              zIndex:        50,
+              pointerEvents: "none",
+              transform:     "translateY(-100%)",
+            }}
+          >
+            <div
+              style={{
+                background:   "rgba(255,255,255,0.98)",
+                border:       "1px solid rgba(36,177,177,0.2)",
+                borderRadius: 14,
+                boxShadow:    "0 8px 32px rgba(0,121,121,0.14), 0 2px 8px rgba(0,0,0,0.06)",
+                padding:      isMobile ? "10px 12px" : "12px 14px",
+                animation:    "tooltip-in 0.15s ease",
+              }}
+            >
+              {/* Header row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: "linear-gradient(135deg,#24B1B1,#007979)", flexShrink: 0 }} />
+                <span style={{ fontSize: isMobile ? 11 : 12, fontWeight: 700, color: "#007979" }}>
+                  {d.label}
+                </span>
+                <span
+                  style={{
+                    marginLeft: "auto",
+                    background: "linear-gradient(135deg,#24B1B1,#007979)",
+                    color: "#fff", fontSize: 10, fontWeight: 700,
+                    borderRadius: 20, padding: "2px 8px", whiteSpace: "nowrap",
+                  }}
+                >
+                  {d.count} {d.count === 1 ? "user" : "users"}
+                </span>
+              </div>
+              {/* Divider */}
+              <div style={{ height: 1, background: "rgba(36,177,177,0.1)", marginBottom: 8 }} />
+              {/* Description */}
+              {desc && (
+                <p style={{ fontSize: isMobile ? 10 : 11, color: "#6b7280", lineHeight: 1.55, margin: 0 }}>
+                  {desc}
+                </p>
+              )}
+            </div>
+            {/* Arrow */}
+            <div
+              style={{
+                position: "absolute", bottom: -6,
+                ...(useLeft ? { left: 18 } : { right: 18 }),
+                width: 12, height: 12,
+                background: "rgba(255,255,255,0.98)",
+                border: "1px solid rgba(36,177,177,0.2)",
+                borderTop: "none", borderLeft: "none",
+                transform: "rotate(45deg)",
+              }}
+            />
+          </div>
+        );
+      })()}
+
+      {/* Chart — horizontal scroll on mobile; full-width stretch on desktop */}
+      <div
+        className="px-3 sm:px-4 pt-4 pb-2"
+        style={{ overflowX: isMobile ? "auto" : "visible", overflowY: "visible", WebkitOverflowScrolling: "touch" }}
+      >
+        <svg
+          viewBox={`0 0 ${TOTAL_VW} ${chartH}`}
+          preserveAspectRatio={isMobile ? "xMinYMid meet" : "none"}
+          width={isMobile ? TOTAL_VW : "100%"}
+          height={chartH}
+          aria-label="Concerns bar chart"
+          style={{ display: "block", overflow: "visible", minWidth: isMobile ? TOTAL_VW : "100%" }}
+        >
+          {/* Y-axis grid lines + labels */}
+          {ticks.map((tick) => {
+            const y = PAD_T + HEIGHT - (tick / maxCount) * HEIGHT;
+            return (
+              <g key={tick}>
+                <line
+                  x1={PAD_L - 4} x2={totalW - PAD_R}
+                  y1={y}         y2={y}
+                  stroke={tick === 0 ? "rgba(36,177,177,0.25)" : "rgba(36,177,177,0.08)"}
+                  strokeWidth={tick === 0 ? 1.5 : 1}
+                  strokeDasharray={tick === 0 ? "" : "4 5"}
+                  vectorEffect="non-scaling-stroke"
+                />
+                <text
+                  x={PAD_L - 6} y={y + 4}
+                  textAnchor="end"
+                  fontSize={isMobile ? "9" : "10"}
+                  fill="rgba(0,121,121,0.55)"
+                  fontWeight="600"
+                  style={{ fontFamily: "inherit" }}
+                >
+                  {tick}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Bars */}
+          {data.map((d, i) => {
+            const slotX = PAD_L + i * SLOT_W;
+            const barX  = slotX + (SLOT_W - BAR_W) / 2;
+            const barH  = maxCount === 0 ? 2 : Math.max((d.count / maxCount) * HEIGHT, d.count > 0 ? 4 : 2);
+            const y     = PAD_T + HEIGHT - barH;
+            const isHov = hovered === d.key;
+            const color = barColors[i % barColors.length];
+            const cx    = slotX + SLOT_W / 2;
+
+            return (
+              <g
+                key={d.key}
+                onMouseEnter={() => setHovered(d.key)}
+                onTouchStart={(e) => handleBarTouch(d.key, e)}
+                style={{ cursor: "crosshair" }}
+              >
+                {/* Track */}
+                <rect x={barX} y={PAD_T} width={BAR_W} height={HEIGHT} rx={isMobile ? 5 : 8} fill="rgba(240,250,250,0.7)" />
+                {/* Fill */}
+                <rect
+                  x={barX} y={y} width={BAR_W} height={barH}
+                  rx={isMobile ? 5 : 8}
+                  fill={isHov ? "#007979" : color}
+                  style={{ transition: "fill 0.18s" }}
+                />
+                {/* Count */}
+                {d.count > 0 && (
+                  <text
+                    x={cx} y={y - 4}
+                    textAnchor="middle"
+                    fontSize={isMobile ? "9" : "11"}
+                    fontWeight="700"
+                    fill={isHov ? "#007979" : "#24B1B1"}
+                    style={{ fontFamily: "inherit" }}
+                  >
+                    {d.count}
+                  </text>
+                )}
+                {/* X label */}
+                <foreignObject x={slotX} y={PAD_T + HEIGHT + 6} width={SLOT_W} height={isMobile ? 36 : 44}>
+                  <div
+                    xmlns="http://www.w3.org/1999/xhtml"
+                    style={{
+                      fontSize:   isMobile ? "9px" : "10px",
+                      fontWeight: isHov ? "700" : "600",
+                      color:      isHov ? "#007979" : "rgba(0,121,121,0.7)",
+                      textAlign:  "center",
+                      lineHeight: "1.3",
+                      wordBreak:  "break-word",
+                      transition: "color 0.18s",
+                      padding:    "0 2px",
+                    }}
+                  >
+                    {d.label}
+                  </div>
+                </foreignObject>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
   );
 }
 
@@ -687,6 +1003,9 @@ export default function AdminDashboard() {
             </div>
           ))}
         </div>
+
+        {/* ── Concerns Bar Chart ── */}
+        <ConcernsBarChart items={items} />
 
         {/* ── Filters ── */}
         <div className="admin-card mb-5 sm:mb-6 animate-fade-up" style={{ animationDelay: "80ms" }}>
