@@ -49,6 +49,7 @@ const initialState = {
   // Data
   items: [],
   stats: { total: 0, booked: 0, completed: 0, cancelled: 0 },
+  concernsAnalytics: {}, // all-time aggregated concerns for active query
   total: 0,           // total records count from the server (for pagination)
 
   // Filters
@@ -125,6 +126,7 @@ const adminSlice = createSlice({
         state.status = "succeeded";
         state.items = action.payload.items ?? [];
         state.stats = action.payload.stats ?? initialState.stats;
+        state.concernsAnalytics = action.payload.concerns_analytics ?? {};
         // Backend should return `total` for pagination; fall back to items.length
         state.total = action.payload.total ?? action.payload.items?.length ?? 0;
       })
@@ -159,6 +161,7 @@ export const {
 // ── Selectors ──────────────────────────────────────────────────────────────────
 export const selectItems           = (state) => state.admin.items;
 export const selectStats           = (state) => state.admin.stats;
+export const selectConcernsAnalytics = (state) => state.admin.concernsAnalytics;
 export const selectTotal           = (state) => state.admin.total;
 export const selectAdminStatus     = (state) => state.admin.status;
 export const selectStatusFilter    = (state) => state.admin.statusFilter;

@@ -67,6 +67,7 @@ import {
   closeDeleteConfirm,
   selectItems,
   selectStats,
+  selectConcernsAnalytics,
   selectTotal,
   selectAdminStatus,
   selectStatusFilter,
@@ -403,7 +404,8 @@ function PaginationBtn({ onClick, disabled, active, children, label }) {
 }
 
 // ── Concerns Bar Chart ───────────────────────────────────────────────────────
-function ConcernsBarChart({ items }) {
+function ConcernsBarChart({ items, allConcernsAnalytics }) {
+  const [viewMode, setViewMode] = useState("page"); // "page" | "all"
   const [hovered,  setHovered]  = useState(null);
   const [tooltip,  setTooltip]  = useState(null);
   const containerRef = useRef(null);
@@ -413,21 +415,26 @@ function ConcernsBarChart({ items }) {
   const data = useMemo(() => {
     const counts = {};
     Object.keys(CONCERN_LABELS).forEach((k) => { counts[k] = 0; });
-    items.forEach((appt) => {
-      (appt.concerns || []).forEach((c) => {
-        if (counts[c] !== undefined) counts[c]++;
-        else counts[c] = 1;
+    if (viewMode === "page") {
+      items.forEach((appt) => {
+        (appt.concerns || []).forEach((c) => {
+          if (counts[c] !== undefined) counts[c]++;
+          else counts[c] = 1;
+        });
       });
-    });
+    } else {
+      Object.keys(counts).forEach((k) => {
+        counts[k] = allConcernsAnalytics[k] || 0;
+      });
+    }
     return Object.entries(CONCERN_LABELS).map(([key, label]) => ({
       key,
       label,
       count: counts[key] || 0,
     }));
-  }, [items]);
+  }, [items, allConcernsAnalytics, viewMode]);
 
   const maxCount = Math.max(...data.map((d) => d.count), 1);
-
   // ── Responsive chart dimensions ─────────────────────────────────────────────
   const BAR_W      = isMobile ? 34  : 52;
   const PAD_L      = isMobile ? 26  : 40;
@@ -508,20 +515,61 @@ function ConcernsBarChart({ items }) {
       onTouchStart={handleBgTouch}
     >
       {/* Header */}
-      <div className="flex items-center gap-2 px-5 pt-5 pb-4 border-b" style={{ borderColor: "rgba(36,177,177,0.1)" }}>
-        <div
-          className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-          style={{ background: "rgba(240,250,250,0.9)", border: "1px solid rgba(36,177,177,0.2)" }}
-        >
-          <TrendingUp className="w-3.5 h-3.5" style={{ color: "#24B1B1" }} />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 pt-5 pb-4 border-b" style={{ borderColor: "rgba(36,177,177,0.1)" }}>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: "rgba(240,250,250,0.9)", border: "1px solid rgba(36,177,177,0.2)" }}
+          >
+            <TrendingUp className="w-3.5 h-3.5" style={{ color: "#24B1B1" }} />
+          </div>
+          <div>
+            <p className="text-xs tracking-[0.18em] uppercase font-semibold" style={{ color: "#007979" }}>
+              Concerns Overview
+            </p>
+            <p className="text-[11px] text-stone-400 font-medium mt-0.5">
+              Users reported per concern · {viewMode === "page" ? "current page" : "all pages & users"}
+            </p>
+          </div>
         </div>
-        <div>
-          <p className="text-xs tracking-[0.18em] uppercase font-semibold" style={{ color: "#007979" }}>
-            Concerns Overview
-          </p>
-          <p className="text-[11px] text-stone-400 font-medium mt-0.5">
-            Users reported per concern · current page
-          </p>
+
+        {/* Chip Toggles */}
+        <div className="flex items-center self-start sm:self-auto">
+          <div
+            className="inline-flex p-0.5 rounded-full bg-teal-50/60 border border-teal-100/50 backdrop-blur-sm"
+            style={{ boxShadow: "inset 0 1px 2px rgba(0,0,0,0.03)" }}
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("page")}
+              className={`px-3 py-1.5 text-[10px] sm:text-xs font-semibold rounded-full transition-all duration-300 ${
+                viewMode === "page"
+                  ? "text-white shadow-sm"
+                  : "text-stone-500 hover:text-teal-700"
+              }`}
+              style={viewMode === "page" ? {
+                background: "linear-gradient(135deg, #24B1B1 0%, #007979 100%)",
+                boxShadow: "0 2px 6px rgba(36,177,177,0.3)"
+              } : {}}
+            >
+              Current Page
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("all")}
+              className={`px-3 py-1.5 text-[10px] sm:text-xs font-semibold rounded-full transition-all duration-300 ${
+                viewMode === "all"
+                  ? "text-white shadow-sm"
+                  : "text-stone-500 hover:text-teal-700"
+              }`}
+              style={viewMode === "all" ? {
+                background: "linear-gradient(135deg, #24B1B1 0%, #007979 100%)",
+                boxShadow: "0 2px 6px rgba(36,177,177,0.3)"
+              } : {}}
+            >
+              All Pages & Users
+            </button>
+          </div>
         </div>
       </div>
 
@@ -710,6 +758,7 @@ export default function AdminDashboard() {
   // ── Redux state ──────────────────────────────────────────────────────────────
   const items           = useSelector(selectItems);
   const stats           = useSelector(selectStats);
+  const concernsAnalytics = useSelector(selectConcernsAnalytics);
   const total           = useSelector(selectTotal);
   const adminStatus     = useSelector(selectAdminStatus);
   const statusFilter    = useSelector(selectStatusFilter);
@@ -1012,7 +1061,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* ── Concerns Bar Chart ── */}
-        <ConcernsBarChart items={items} />
+        <ConcernsBarChart items={items} allConcernsAnalytics={concernsAnalytics} />
 
         {/* ── Filters ── */}
         <div className="admin-card mb-5 sm:mb-6 animate-fade-up" style={{ animationDelay: "80ms" }}>
