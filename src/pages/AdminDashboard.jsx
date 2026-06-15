@@ -831,6 +831,7 @@ export default function AdminDashboard() {
   const totalPages      = useSelector(selectTotalPages);
 
   const loading = adminStatus === "loading";
+  const [exporting, setExporting] = useState(false);
 
   // ── Local input state for responsive typing + debounce ───────────────────────
   // `inputQ` updates immediately (fast UI), `debouncedQ` updates after 450 ms
@@ -932,35 +933,89 @@ export default function AdminDashboard() {
     return [...pages].sort((a, b) => a - b);
   }, [totalPages, page]);
 
-  // ── Excel export ─────────────────────────────────────────────────────────────
-  const exportToExcel = useCallback(() => {
-    if (items.length === 0) {
+  // ── Excel export (all pages, batched at 100/request) ─────────────────────────
+  const EXPORT_BATCH = 100; // backend max page_size
+  const exportToExcel = useCallback(async () => {
+    if (total === 0) {
       toast.info("No data to export");
       return;
     }
-    const rows = items.map((a) => ({
-      Date:         fmtDate(a.date),
-      Time:         fmtTime12(a.slot),
-      "First Name": a.first_name,
-      "Last Name":  a.last_name,
-      Designation:  a.designation,
-      Company:      a.company,
-      Email:        a.email,
-      Phone:        a.phone,
-      Concerns:     (a.concerns || []).map((c) => CONCERN_LABELS[c] || c).join(", "),
-      Status:       a.status.charAt(0).toUpperCase() + a.status.slice(1),
-    }));
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const colWidths = Object.keys(rows[0]).map((key) => ({
-      wch: Math.max(key.length, ...rows.map((r) => String(r[key] ?? "").length)),
-    }));
-    ws["!cols"] = colWidths;
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Appointments");
-    const timestamp = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
-    XLSX.writeFile(wb, `appointments_${timestamp}.xlsx`);
-    toast.success(`Exported ${items.length} appointment${items.length !== 1 ? "s" : ""}`);
-  }, [items]);
+
+    setExporting(true);
+    const toastId = toast.loading(`Fetching all ${total} appointment${total !== 1 ? "s" : ""}…`);
+
+    try {
+      // Build shared filter params (no page / page_size yet)
+      const baseParams = {};
+      if (statusFilter && statusFilter !== "all") baseParams.status = statusFilter;
+      if (dateFrom) baseParams.date_from = dateFrom;
+      if (dateTo)   baseParams.date_to   = dateTo;
+      if (q.trim()) baseParams.q         = q.trim();
+
+      // Paginate in batches of EXPORT_BATCH (≤ 100) until all records are collected
+      const allItems = [];
+      let currentPage = 1;
+      const totalPages = Math.ceil(total / EXPORT_BATCH);
+
+      while (currentPage <= totalPages) {
+        // Update toast with progress if multi-page
+        if (totalPages > 1) {
+          toast.loading(
+            `Fetching page ${currentPage} of ${totalPages}…`,
+            { id: toastId }
+          );
+        }
+
+        const { data } = await api.get("/admin/appointments", {
+          params: { ...baseParams, page: currentPage, page_size: EXPORT_BATCH },
+        });
+
+        const pageItems = data?.items ?? data ?? [];
+        allItems.push(...pageItems);
+
+        // If the API returned fewer items than requested, we've hit the last page
+        if (pageItems.length < EXPORT_BATCH) break;
+        currentPage++;
+      }
+
+      if (allItems.length === 0) {
+        toast.dismiss(toastId);
+        toast.info("No data to export");
+        return;
+      }
+
+      const rows = allItems.map((a) => ({
+        Date:         fmtDate(a.date),
+        Time:         fmtTime12(a.slot),
+        "First Name": a.first_name,
+        "Last Name":  a.last_name,
+        Designation:  a.designation,
+        Company:      a.company,
+        Email:        a.email,
+        Phone:        a.phone,
+        Concerns:     (a.concerns || []).map((c) => CONCERN_LABELS[c] || c).join(", "),
+        Status:       a.status.charAt(0).toUpperCase() + a.status.slice(1),
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const colWidths = Object.keys(rows[0]).map((key) => ({
+        wch: Math.max(key.length, ...rows.map((r) => String(r[key] ?? "").length)),
+      }));
+      ws["!cols"] = colWidths;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Appointments");
+      const timestamp = new Date().toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+      XLSX.writeFile(wb, `appointments_${timestamp}.xlsx`);
+
+      toast.dismiss(toastId);
+      toast.success(`Exported ${allItems.length} appointment${allItems.length !== 1 ? "s" : ""}`);
+    } catch (err) {
+      toast.dismiss(toastId);
+      toast.error(err.response?.data?.detail || "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }, [total, statusFilter, dateFrom, dateTo, q]);
 
   return (
     <div className="admin-bg relative" data-testid="admin-dashboard-page">
@@ -1086,15 +1141,17 @@ export default function AdminDashboard() {
             <Button
               onClick={exportToExcel}
               data-testid="export-excel-btn"
-              disabled={loading || items.length === 0}
+              disabled={loading || exporting || total === 0}
               className="rounded-full gap-1.5 text-xs sm:text-sm px-3 sm:px-5 h-9 font-semibold text-white border-0 transition-all duration-200 hover:-translate-y-[1px] disabled:opacity-50"
               style={{
                 background: "linear-gradient(135deg, #24B1B1 0%, #007979 100%)",
                 boxShadow: "0 4px 16px rgba(36,177,177,0.35)",
               }}
             >
-              <FileDown className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Export</span>
+              {exporting
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <FileDown className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export"}</span>
             </Button>
           </div>
         </div>
